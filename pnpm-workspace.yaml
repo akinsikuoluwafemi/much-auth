@@ -1,0 +1,6 @@
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
+packages:
+  - "my-app"
+  - "auth-server"
