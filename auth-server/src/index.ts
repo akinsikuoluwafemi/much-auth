@@ -3,6 +3,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import authRoutes from "./routes/auth.js";
 import protectedRoutes from "./routes/protected.js";
+import mfaRoutes from "./routes/mfa";
 
 const app = express();
 
@@ -17,6 +18,8 @@ app.use(
 
 app.use("/auth", authRoutes);
 app.use("/api", protectedRoutes);
+app.use("/mfa", mfaRoutes);
+
 
 const PORT = process.env.PORT ?? 4000;
 app.listen(PORT, () => {
