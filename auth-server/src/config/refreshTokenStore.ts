@@ -1,3 +1,8 @@
+import { db } from "../db/index.js";
+import { refreshTokens } from '../db/schema.js';
+import { eq } from "drizzle-orm";
+
+
 // In-memory store — replace with PostgreSQL in Phase 2
 // Structure: Map<token, { userId, familyId, used }>
 
@@ -10,38 +15,40 @@ interface RefreshTokenRecord {
 }
 
 
-const store = new Map<string, RefreshTokenRecord>();
+// change this to use the database instead of in-memory store
+// const store = new Map<string, RefreshTokenRecord>();
 
 export const refreshTokenStore = {
-  save(token: string, record: RefreshTokenRecord) {
-    store.set(token, record);
+  async save(token: string, record: RefreshTokenRecord) {
+    await db.insert(refreshTokens).values({
+      token,
+      userId: record.userId,
+      familyId: record.familyId,
+      used: record.used,
+      expiresAt: record.expiresAt,
+    });
   },
 
-  find(token: string) {
-    return store.get(token);
+  async find(token: string) {
+    const [record] = await db
+      .select()
+      .from(refreshTokens)
+      .where(eq(refreshTokens.token, token));
+    return record ?? null;
   },
 
-  markUsed(token: string) {
-    const record = store.get(token);
-    if (record) {
-      store.set(token, { ...record, used: true });
-    }
+  async markUsed(token: string) {
+    await db
+      .update(refreshTokens)
+      .set({ used: true })
+      .where(eq(refreshTokens.token, token));
   },
 
-  // revoke all tokens in a family (resuse detection)
-  revokeFamily(familyId: string) {
-    for (const [token, record] of store.entries()) {
-      if (record.familyId === familyId) {
-        store.delete(token); // delete all tokens in the family
-      }
-    }
+  async revokeFamily(familyId: string) {
+    await db.delete(refreshTokens).where(eq(refreshTokens.familyId, familyId));
   },
 
-  revokeAllForUser(userId: string) {
-    for (const [token, record] of store.entries()) {
-      if(record.userId === userId) {
-        store.delete(token); // delete all tokens for this user
-      }
-    }
-  }
-}
+  async revokeAllForUser(userId: string) {
+    await db.delete(refreshTokens).where(eq(refreshTokens.userId, userId));
+  },
+};
