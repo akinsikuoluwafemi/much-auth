@@ -88,7 +88,15 @@ router.post("/verify-mfa", async (req: Request, res: Response) => {
 
 // Shared helper — issues access token + sets refresh token cookie
 async function issueTokens(res: Response, userId: string, email: string) {
-  const accessToken = issueAccessToken({ sub: userId, email, roles: ["user"] });
+  // TODO: look up user's actual org from organization_members table
+  // For now — hardcode so RBAC middleware doesn't reject every request
+  const accessToken = issueAccessToken({
+    sub: userId,
+    email,
+    roles: ["admin"], // hardcode role to test both admin + viewer scenarios
+    org_id: "test-org-id",
+    org_slug: "test-org",
+  });
 
   const familyId = uuidv4();
   const refreshToken = uuidv4();
@@ -169,6 +177,8 @@ router.post("/refresh", async (req: Request, res: Response) => {
     sub: record.userId,
     email: user.email,
     roles: ["user"],
+    org_id: "",
+    org_slug: ""
   });
 
   console.log({ newAccessToken, newRefreshToken });

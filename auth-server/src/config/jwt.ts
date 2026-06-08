@@ -19,12 +19,14 @@ const publicKey = fs.readFileSync(
 );
 
 export interface TokenPayload {
-  sub: string;   //subject - user ID (OIDC standard claim)
+  sub: string; //subject - user ID (OIDC standard claim)
   email: string;
-  roles: string[];
-  jti: string;    // JWT ID - unique per token, used for revocation
-  iat?: number;   // issued at
-  exp?: number;   // expiry
+  roles: string[]; // e.g. ["admin"], ["member", "viewer"], etc.
+  org_id: string; // ← add this
+  org_slug: string; // ← add this
+  jti: string; // JWT ID - unique per token, used for revocation
+  iat?: number; // issued at
+  exp?: number; // expiry
 }
 
 export function issueAccessToken(payload: Omit<TokenPayload, 'jti'>): string {

@@ -1,5 +1,7 @@
 import { Request, Response, Router } from "express";
-import { authenticate } from '../middleware/authenticate';
+import { authenticate } from '../middleware/authenticate.js';
+import { authorize } from "../middleware/authorize.js";
+import { requireOrg } from "../middleware/requireOrg.js";
 
 const router = Router();
 
@@ -8,5 +10,20 @@ router.get('/me', authenticate, (req: Request, res: Response) => {
   console.log(req.user, 'req.user in /me route');
   res.json({ user: req.user });
 })
+
+// Test RBAC — only "admin" role has "users:write"
+router.get('/admin-only', authenticate, authorize('users:write'), (req, res) => {
+  res.json({ message: 'You have users:write permission', user: req.user });
+});
+
+// Test RBAC — all roles have "users:read"
+router.get('/members', authenticate, authorize('users:read'), (req, res) => {
+  res.json({ message: 'You have users:read permission', user: req.user });
+});
+
+// Test requireOrg — needs org_id in token
+router.get('/org-context', authenticate, requireOrg, (req, res) => {
+  res.json({ message: 'Org context present', org_id: req.user!.org_id, org_slug: req.user!.org_slug });
+});
 
 export default router;
