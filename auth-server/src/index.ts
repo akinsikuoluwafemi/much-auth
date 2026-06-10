@@ -5,6 +5,7 @@ import cors from "cors";
 import authRoutes from "./routes/auth.js";
 import protectedRoutes from "./routes/protected.js";
 import mfaRoutes from "./routes/mfa";
+import orgRoutes from "./routes/orgs.js";
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.use(
 app.use("/auth", authRoutes);
 app.use("/api", protectedRoutes);
 app.use("/mfa", mfaRoutes);
+app.use("/orgs", orgRoutes);
 
 const PORT = process.env.PORT ?? 4000;
 app.listen(PORT, () => {

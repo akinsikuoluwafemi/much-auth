@@ -7,6 +7,7 @@ import { verify } from "otplib";
 import { db } from "../db/index.js";
 import { users } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { organizationMembers, organizations } from "../db/schema";
 
 const router = Router();
 
@@ -88,14 +89,26 @@ router.post("/verify-mfa", async (req: Request, res: Response) => {
 
 // Shared helper — issues access token + sets refresh token cookie
 async function issueTokens(res: Response, userId: string, email: string) {
-  // TODO: look up user's actual org from organization_members table
-  // For now — hardcode so RBAC middleware doesn't reject every request
+   const [membership] = await db
+     .select({
+       role: organizationMembers.role,
+       orgId: organizations.id,
+       orgSlug: organizations.slug,
+     })
+     .from(organizationMembers)
+     .innerJoin(
+       organizations,
+       eq(organizations.id, organizationMembers.organizationId),
+     )
+     .where(eq(organizationMembers.userId, userId))
+     .limit(1);
+
   const accessToken = issueAccessToken({
     sub: userId,
     email,
-    roles: ["admin"], // hardcode role to test both admin + viewer scenarios
-    org_id: "test-org-id",
-    org_slug: "test-org",
+    roles: membership ? [membership.role] : ['user'],
+    org_id: membership?.orgId ?? '',
+    org_slug: membership?.orgSlug ?? '',
   });
 
   const familyId = uuidv4();
