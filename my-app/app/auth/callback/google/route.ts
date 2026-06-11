@@ -70,6 +70,7 @@ export async function GET(request: Request) {
     name: userInfo.name,
     picture: userInfo.picture,
     accessToken: tokens.access_token,
+    provider: "google",
   };
   await session.save();
 

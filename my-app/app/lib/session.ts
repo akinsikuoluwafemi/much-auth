@@ -8,6 +8,7 @@ export interface SessionData {
     name: string;
     picture: string;
     accessToken: string;
+    provider: "google" | "github";
   };
   // Temporarily store PKCE state during the OAuth flow
   oauthState?: {
