@@ -4,7 +4,7 @@ import cookieParser from "cookie-parser";
 import cors from "cors";
 import authRoutes from "./routes/auth.js";
 import protectedRoutes from "./routes/protected.js";
-import mfaRoutes from "./routes/mfa";
+import mfaRoutes from "./routes/mfa.js";
 import orgRoutes from "./routes/orgs.js";
 
 const app = express();

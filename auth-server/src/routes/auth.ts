@@ -8,6 +8,7 @@ import { db } from "../db/index.js";
 import { users } from "../db/schema.js";
 import { eq } from "drizzle-orm";
 import { organizationMembers, organizations } from "../db/schema";
+import { audit } from "../lib/audit.js";
 
 const router = Router();
 
@@ -34,6 +35,14 @@ router.post("/register", async (req: Request, res: Response) => {
     .values({ email, passwordHash })
     .returning();
 
+  await audit({
+    event: "user.registered",
+    userId: user.id,
+    metadata: { email },
+    req,
+    createdAt: new Date(),
+  });
+
   return res.status(201).json({
     message: "User created",
     user: { id: user.id, email: user.email },
@@ -52,7 +61,24 @@ router.post("/login", async (req: Request, res: Response) => {
   const storedHash = user?.passwordHash ?? dummyHash;
   const isValid = await bcrypt.compare(password, storedHash);
 
+  // Look up org membership once — used for audit on both success and failure
+  const [loginMembership] = user
+    ? await db
+        .select({ orgId: organizationMembers.organizationId })
+        .from(organizationMembers)
+        .where(eq(organizationMembers.userId, user.id))
+        .limit(1)
+    : [];
+
   if (!user || !isValid) {
+    await audit({
+      event: "user.login_failed",
+      userId: user?.id,
+      organizationId: loginMembership?.orgId,
+      metadata: { email },
+      req,
+      createdAt: new Date(),
+    });
     return res.status(401).json({ error: "Invalid credentials" });
   }
 
@@ -60,6 +86,15 @@ router.post("/login", async (req: Request, res: Response) => {
   if (user.mfaEnabled) {
     return res.json({ mfaPending: true, userId: user.id });
   }
+
+  await audit({
+    event: "user.login",
+    userId: user.id,
+    organizationId: loginMembership?.orgId,
+    metadata: { method: "email" },
+    req,
+    createdAt: new Date(),
+  });
 
   return issueTokens(res, user.id, user.email);
 });
@@ -78,37 +113,64 @@ router.post("/verify-mfa", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "MFA not enabled for this user" });
   }
 
-  const isValid = verify({ token, secret: user.mfaSecret });
+  const [mfaMembership] = await db
+    .select({ orgId: organizationMembers.organizationId })
+    .from(organizationMembers)
+    .where(eq(organizationMembers.userId, user.id))
+    .limit(1);
+
+  let isValid = false;
+  try {
+    isValid = verify({ token, secret: user.mfaSecret }) as unknown as boolean;
+  } catch {
+    // otplib throws TokenLengthError instead of returning false for malformed tokens
+    isValid = false;
+  }
 
   if (!isValid) {
+    await audit({
+      event: "mfa.verify_failed",
+      userId: user.id,
+      organizationId: mfaMembership?.orgId,
+      req,
+      createdAt: new Date(),
+    });
     return res.status(401).json({ error: "Invalid MFA token" });
   }
 
+  await audit({
+    event: "user.login",
+    userId: user.id,
+    organizationId: mfaMembership?.orgId,
+    metadata: { method: "mfa" },
+    req,
+    createdAt: new Date(),
+  });
   return issueTokens(res, user.id, user.email);
 });
 
 // Shared helper — issues access token + sets refresh token cookie
 async function issueTokens(res: Response, userId: string, email: string) {
-   const [membership] = await db
-     .select({
-       role: organizationMembers.role,
-       orgId: organizations.id,
-       orgSlug: organizations.slug,
-     })
-     .from(organizationMembers)
-     .innerJoin(
-       organizations,
-       eq(organizations.id, organizationMembers.organizationId),
-     )
-     .where(eq(organizationMembers.userId, userId))
-     .limit(1);
+  const [membership] = await db
+    .select({
+      role: organizationMembers.role,
+      orgId: organizations.id,
+      orgSlug: organizations.slug,
+    })
+    .from(organizationMembers)
+    .innerJoin(
+      organizations,
+      eq(organizations.id, organizationMembers.organizationId),
+    )
+    .where(eq(organizationMembers.userId, userId))
+    .limit(1);
 
   const accessToken = issueAccessToken({
     sub: userId,
     email,
-    roles: membership ? [membership.role] : ['user'],
-    org_id: membership?.orgId ?? '',
-    org_slug: membership?.orgSlug ?? '',
+    roles: membership ? [membership.role] : ["user"],
+    org_id: membership?.orgId ?? "",
+    org_slug: membership?.orgSlug ?? "",
   });
 
   const familyId = uuidv4();
@@ -160,6 +222,12 @@ router.post("/refresh", async (req: Request, res: Response) => {
     // Someone is using a previously used token
     // This means the refresh token was stolen — revoke the entire family
     console.warn(`Refresh token reuse detected for user ${record.userId}`);
+    await audit({
+      event: "token.reuse_detected",
+      userId: record.userId,
+      req,
+      createdAt: new Date(),
+    });
     await refreshTokenStore.revokeFamily(record.familyId);
     return res
       .status(401)
@@ -191,7 +259,7 @@ router.post("/refresh", async (req: Request, res: Response) => {
     email: user.email,
     roles: ["user"],
     org_id: "",
-    org_slug: ""
+    org_slug: "",
   });
 
   console.log({ newAccessToken, newRefreshToken });

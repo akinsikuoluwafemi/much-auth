@@ -5,9 +5,9 @@ import { organizations, organizationMembers, users } from "../db/schema";
 import { authenticate } from "../middleware/authenticate";
 import { authorize } from "../middleware/authorize";
 import { requireOrg } from "../middleware/requireOrg";
+import { audit } from "../lib/audit.js";
 
 const router = Router();
-
 
 // Post /orgs
 // Creates a new org and makes the creator an admin
@@ -48,30 +48,41 @@ router.post("/", authenticate, async (req: Request, res: Response) => {
     role: "admin",
   });
 
+  await audit({
+    event: "org.created",
+    userId: req.user!.sub,
+    organizationId: org.id,
+    metadata: { name, slug },
+    req,
+    createdAt: new Date(),
+  });
   return res.status(201).json({ org });
-
 });
-
 
 // Get /orgs/:id
 // Get org details + all members - admin or member can view
-router.get('/:id', authenticate, requireOrg, authorize('users:read'), async (req: Request, res: Response) => {
-  const { id } = req.params;
+router.get(
+  "/:id",
+  authenticate,
+  requireOrg,
+  authorize("users:read"),
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
 
-  // TENANT ISOLATION — only return this org if the token's org_id matches
-  // Without this check, any authenticated user could fetch any org by ID
-  if (req.user!.org_id !== id) {
-    return res.status(403).json({ error: "Access denied" });
-  }
+    // TENANT ISOLATION — only return this org if the token's org_id matches
+    // Without this check, any authenticated user could fetch any org by ID
+    if (req.user!.org_id !== id) {
+      return res.status(403).json({ error: "Access denied" });
+    }
 
-  const [org] = await db
-    .select()
-    .from(organizations)
-    .where(eq(organizations.id, id));
-  
-  if (!org) {
-    return res.status(404).json({ error: "Organisation not found" });
-  }
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, id));
+
+    if (!org) {
+      return res.status(404).json({ error: "Organisation not found" });
+    }
 
     const members = await db
       .select({
@@ -85,7 +96,8 @@ router.get('/:id', authenticate, requireOrg, authorize('users:read'), async (req
       .where(eq(organizationMembers.organizationId, id));
 
     return res.json({ org, members });
-});
+  },
+);
 
 // POST /orgs/:id/invite
 // Add a user to the org — admin only
@@ -147,40 +159,62 @@ router.post(
       })
       .returning();
 
+    await audit({
+      event: "org.member_invited",
+      userId: req.user!.sub,
+      organizationId: id,
+      metadata: { invitedUserId: invitedUser.id, email, role },
+      req,
+      createdAt: new Date(),
+    });
     return res.status(201).json({ membership });
   },
 );
 
 // PATCH /orgs/:id/members/:userId
 // Change a member's role — admin only
-router.patch('/:id/members/:userId', authenticate, requireOrg, authorize('users:write'), async (req: Request, res: Response) => {
-  const { id, userId } = req.params;
-  const { role } = req.body;
+router.patch(
+  "/:id/members/:userId",
+  authenticate,
+  requireOrg,
+  authorize("users:write"),
+  async (req: Request, res: Response) => {
+    const { id, userId } = req.params;
+    const { role } = req.body;
 
-  if (req.user!.org_id !== id) {
-    return res.status(403).json({ error: 'Access denied' });
-  }
+    if (req.user!.org_id !== id) {
+      return res.status(403).json({ error: "Access denied" });
+    }
 
-  if (!['admin', 'member', 'viewer'].includes(role)) {
-    return res.status(400).json({ error: 'Invalid role' });
-  }
+    if (!["admin", "member", "viewer"].includes(role)) {
+      return res.status(400).json({ error: "Invalid role" });
+    }
 
-  const [updated] = await db
-    .update(organizationMembers)
-    .set({ role })
-    .where(
-      and(
-        eq(organizationMembers.organizationId, id),
-        eq(organizationMembers.userId, userId as string)
+    const [updated] = await db
+      .update(organizationMembers)
+      .set({ role })
+      .where(
+        and(
+          eq(organizationMembers.organizationId, id),
+          eq(organizationMembers.userId, userId as string),
+        ),
       )
-    )
-    .returning();
+      .returning();
 
-  if (!updated) {
-    return res.status(404).json({ error: 'Member not found' });
-  }
+    if (!updated) {
+      return res.status(404).json({ error: "Member not found" });
+    }
 
-  return res.json({ membership: updated });
-});
+    await audit({
+      event: "org.role_changed",
+      userId: req.user!.sub,
+      organizationId: id,
+      metadata: { targetUserId: userId, newRole: role },
+      req,
+      createdAt: new Date(),
+    });
+    return res.json({ membership: updated });
+  },
+);
 
 export default router;

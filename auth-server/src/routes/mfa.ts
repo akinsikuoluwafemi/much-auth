@@ -5,6 +5,7 @@ import { authenticate } from "../middleware/authenticate.js";
 import { db } from "../db/index.js";
 import { users } from "../db/schema.js";
 import { eq } from "drizzle-orm";
+import { audit } from "../lib/audit.js";
 
 const router = Router();
 
@@ -43,13 +44,26 @@ router.post("/verify-setup", authenticate, async (req, res) => {
     return res.status(400).json({ error: "No pending MFA setup found" });
   }
 
-  const isValid = verify({ token, secret: user.mfaSecret });
+  let isValid = false;
+  try {
+    isValid = verify({ token, secret: user.mfaSecret }) as unknown as boolean;
+  } catch {
+    isValid = false;
+  }
+
   if (!isValid) {
+    await audit({
+      event: "mfa.verify_failed",
+      userId,
+      req,
+      createdAt: new Date(),
+    });
     return res.status(400).json({ error: "Invalid MFA token" });
   }
 
   // Activate MFA
   await db.update(users).set({ mfaEnabled: true }).where(eq(users.id, userId));
+  await audit({ event: "mfa.enabled", userId, req, createdAt: new Date() });
 
   return res.json({ message: "MFA setup verified and enabled" });
 });
