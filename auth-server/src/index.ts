@@ -6,6 +6,7 @@ import authRoutes from "./routes/auth.js";
 import protectedRoutes from "./routes/protected.js";
 import mfaRoutes from "./routes/mfa.js";
 import orgRoutes from "./routes/orgs.js";
+import jwksRoutes from "./routes/jwks.js";
 
 const app = express();
 
@@ -22,6 +23,7 @@ app.use("/auth", authRoutes);
 app.use("/api", protectedRoutes);
 app.use("/mfa", mfaRoutes);
 app.use("/orgs", orgRoutes);
+app.use("/.well-known", jwksRoutes);
 
 const PORT = process.env.PORT ?? 4000;
 app.listen(PORT, () => {

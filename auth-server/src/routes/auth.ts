@@ -1,16 +1,143 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
-import { issueAccessToken } from "../config/jwt.js";
+import {
+  issueAccessToken,
+  verifyAccessTokenIgnoreExpiry,
+} from "../config/jwt.js";
 import { v4 as uuidv4 } from "uuid";
 import { refreshTokenStore } from "../config/refreshTokenStore.js";
 import { verify } from "otplib";
 import { db } from "../db/index.js";
 import { users } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { organizationMembers, organizations } from "../db/schema";
 import { audit } from "../lib/audit.js";
 
 const router = Router();
+
+// POST /auth/social-login
+// Called by Next.js after Google/GitHub OAuth succeeds.
+// Upserts the user in the DB (creates if new, fetches if existing) and
+// issues our own RS256 JWT — so social users get the same token format
+// as email/password users and can use all org/RBAC features.
+// POST /auth/switch-org
+// Issues a new JWT scoped to the requested org.
+// Verifies the user is actually a member before issuing — prevents privilege escalation.
+router.post("/switch-org", async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing token" });
+  }
+  try {
+    req.user = verifyAccessTokenIgnoreExpiry(authHeader.slice(7));
+  } catch {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+
+  const { orgId } = req.body;
+  if (!orgId) return res.status(400).json({ error: "orgId required" });
+
+  // Verify membership — user must actually belong to this org
+  const [membership] = await db
+    .select()
+    .from(organizationMembers)
+    .where(
+      and(
+        eq(organizationMembers.userId, req.user.sub),
+        eq(organizationMembers.organizationId, orgId),
+      ),
+    );
+
+  if (!membership) {
+    return res
+      .status(403)
+      .json({ error: "You are not a member of this organisation" });
+  }
+
+  // issueTokens queries org membership fresh, but we need it to pick THIS specific org.
+  // We'll build the token directly with this org's context.
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.id, orgId));
+
+  if (!org) return res.status(404).json({ error: "Organisation not found" });
+
+  const accessToken = issueAccessToken({
+    sub: req.user.sub,
+    email: req.user.email,
+    roles: [membership.role],
+    org_id: org.id,
+    org_slug: org.slug,
+  });
+
+  await audit({
+    event: "user.login",
+    userId: req.user.sub,
+    organizationId: org.id,
+    metadata: { method: "org_switch", targetOrg: org.slug },
+    req,
+  });
+
+  return res.json({ accessToken });
+});
+
+// POST /auth/reissue
+// Re-issues a fresh JWT for the already-authenticated user, picking up their
+// latest org membership from the DB. Used after actions that change org context
+// (creating an org, accepting an invite) so the token stays in sync.
+// Accepts expired tokens — the RS256 signature is still verified, so this
+// cannot be abused with a forged token. The caller must have had a real session.
+router.post("/reissue", async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing token" });
+  }
+  try {
+    req.user = verifyAccessTokenIgnoreExpiry(authHeader.slice(7));
+  } catch {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+  return issueTokens(res, req.user.sub, req.user.email);
+});
+
+router.post("/social-login", async (req: Request, res: Response) => {
+  const { email, name, picture, provider } = req.body;
+
+  if (!email || !provider) {
+    return res.status(400).json({ error: "email and provider are required" });
+  }
+
+  if (!["google", "github"].includes(provider)) {
+    return res.status(400).json({ error: "Invalid provider" });
+  }
+
+  // Upsert: find existing user or create a new one (no password for social accounts)
+  let [user] = await db.select().from(users).where(eq(users.email, email));
+
+  if (!user) {
+    [user] = await db
+      .insert(users)
+      .values({ email, passwordHash: null })
+      .returning();
+
+    await audit({
+      event: "user.registered",
+      userId: user.id,
+      metadata: { email, provider },
+      req,
+    });
+  }
+
+  await audit({
+    event: "user.login",
+    userId: user.id,
+    metadata: { method: provider },
+    req,
+  });
+
+  return issueTokens(res, user.id, email);
+});
 
 router.post("/register", async (req: Request, res: Response) => {
   const { email, password } = req.body;
@@ -191,7 +318,10 @@ async function issueTokens(res: Response, userId: string, email: string) {
     path: "/auth/refresh",
   });
 
-  return res.json({ accessToken });
+  // Also return refreshToken in body — the BFF pattern means the browser never
+  // receives Set-Cookie headers from server-side fetch calls to auth-server.
+  // The Next.js BFF stores the refresh token in iron-session instead.
+  return res.json({ accessToken, refreshToken });
 }
 
 // The sequence in your /refresh route is:
@@ -205,7 +335,8 @@ async function issueTokens(res: Response, userId: string, email: string) {
 
 // New /auth/refresh route:
 router.post("/refresh", async (req: Request, res: Response) => {
-  const refreshToken = req.cookies.refresh_token;
+  // Accept from request body (BFF pattern) OR from cookie (direct browser access)
+  const refreshToken = req.body?.refreshToken ?? req.cookies.refresh_token;
 
   if (!refreshToken) {
     return res.status(401).json({ error: "No refresh token provided" });
@@ -254,15 +385,29 @@ router.post("/refresh", async (req: Request, res: Response) => {
     .select()
     .from(users)
     .where(eq(users.id, record.userId));
+
+  // Reload org membership so the refreshed token stays in sync with DB
+  const [membership] = await db
+    .select({
+      role: organizationMembers.role,
+      orgId: organizations.id,
+      orgSlug: organizations.slug,
+    })
+    .from(organizationMembers)
+    .innerJoin(
+      organizations,
+      eq(organizations.id, organizationMembers.organizationId),
+    )
+    .where(eq(organizationMembers.userId, record.userId))
+    .limit(1);
+
   const newAccessToken = issueAccessToken({
     sub: record.userId,
     email: user.email,
-    roles: ["user"],
-    org_id: "",
-    org_slug: "",
+    roles: membership ? [membership.role] : ["user"],
+    org_id: membership?.orgId ?? "",
+    org_slug: membership?.orgSlug ?? "",
   });
-
-  console.log({ newAccessToken, newRefreshToken });
 
   res.cookie("refresh_token", newRefreshToken, {
     httpOnly: true,
@@ -272,7 +417,10 @@ router.post("/refresh", async (req: Request, res: Response) => {
     path: "/auth/refresh",
   });
 
-  return res.json({ accessToken: newAccessToken });
+  return res.json({
+    accessToken: newAccessToken,
+    refreshToken: newRefreshToken,
+  });
 });
 
 export default router;

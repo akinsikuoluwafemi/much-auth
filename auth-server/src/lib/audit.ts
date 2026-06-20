@@ -12,8 +12,10 @@ export type AuditEvent =
   | "token.reuse_detected"
   | "org.created"
   | "org.member_invited"
-  | "org.role_changed";
-
+  | "org.role_changed"
+  | "secret.accessed"
+  | "secret.created"
+  | "secret.deleted";
 
 interface AuditOptions {
   event: AuditEvent;
@@ -33,7 +35,7 @@ function getIp(req: Request): string {
   return req.socket.remoteAddress ?? "unknown";
 }
 
-export async function audit(options: AuditOptions): Promise<void> { 
+export async function audit(options: AuditOptions): Promise<void> {
   const { event, userId, organizationId, metadata, req, createdAt } = options;
 
   // add into auditlogs table
@@ -43,7 +45,7 @@ export async function audit(options: AuditOptions): Promise<void> {
     organizationId: organizationId ?? null,
     metadata: metadata ? JSON.stringify(metadata) : null,
     ipAddress: req ? getIp(req) : null,
-    userAgent: req ? req.headers["user-agent"]?.toString() ?? null : null,
+    userAgent: req ? (req.headers["user-agent"]?.toString() ?? null) : null,
     createdAt: createdAt ?? new Date(),
-  })
+  });
 }

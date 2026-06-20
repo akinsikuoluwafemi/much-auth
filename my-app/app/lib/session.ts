@@ -5,16 +5,24 @@ export interface SessionData {
   user?: {
     id: string;
     email: string;
-    name: string;
-    picture: string;
+    name: string | null;
+    picture: string | null;
     accessToken: string;
-    provider: "google" | "github";
+    refreshToken?: string;
+    provider: "google" | "github" | "email";
+    roles?: string[];
+    org_id?: string;
+    org_slug?: string;
   };
   // Temporarily store PKCE state during the OAuth flow
   oauthState?: {
     state: string;
     codeVerifier: string;
     returnTo: string;
+  };
+  // MFA pending — password check passed, TOTP code not yet entered
+  mfaPending?: {
+    userId: string;
   };
 }
 
@@ -34,5 +42,3 @@ export async function getSession() {
 }
 
 // Why sameSite: lax not strict? With strict, the cookie is NOT sent when the user lands on your site from Google's redirect — the browser considers that a cross-site navigation. lax allows it for top-level navigations while still protecting against CSRF.
-
-

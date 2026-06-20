@@ -62,15 +62,54 @@ export async function GET(request: Request) {
   );
   const userInfo = await userInfoResponse.json();
 
-  // Clear the oauth state, set the user session
+  // Exchange with our auth-server — upsert user in DB, get back our RS256 JWT
+  const socialRes = await fetch(
+    `${process.env.AUTH_SERVER_URL}/auth/social-login`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: userInfo.email,
+        name: userInfo.name,
+        picture: userInfo.picture,
+        provider: "google",
+      }),
+    },
+  );
+
+  if (!socialRes.ok) {
+    const err = await socialRes.text();
+    console.error("social-login failed:", err);
+    return NextResponse.redirect(
+      `${process.env.NEXT_PUBLIC_APP_URL}/auth/login?error=social_login_failed`,
+    );
+  }
+
+  const { accessToken, refreshToken } = await socialRes.json();
+
+  // Decode org context from our JWT so the sidebar and org pages work immediately
+  let jwtOrg: { org_id?: string; org_slug?: string; roles?: string[] } = {};
+  try {
+    jwtOrg = JSON.parse(
+      Buffer.from(accessToken.split(".")[1], "base64url").toString(),
+    );
+  } catch {
+    /* leave empty */
+  }
+
+  // Clear the oauth state, set the user session with our own JWT
   session.oauthState = undefined;
   session.user = {
     id: userInfo.sub,
     email: userInfo.email,
     name: userInfo.name,
     picture: userInfo.picture,
-    accessToken: tokens.access_token,
+    accessToken, // ← our RS256 JWT, not Google's token
+    refreshToken,
     provider: "google",
+    roles: jwtOrg.roles,
+    org_id: jwtOrg.org_id || undefined,
+    org_slug: jwtOrg.org_slug || undefined,
   };
   await session.save();
 

@@ -59,3 +59,19 @@ export const auditLogs = pgTable("audit_logs", {
   userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const orgInvites = pgTable("org_invites", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id")
+    .references(() => organizations.id)
+    .notNull(),
+  invitedByUserId: uuid("invited_by_user_id")
+    .references(() => users.id)
+    .notNull(),
+  email: text("email").notNull(),
+  role: text("role").notNull().default("member"),
+  token: uuid("token").defaultRandom().notNull().unique(),
+  used: boolean("used").default(false).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

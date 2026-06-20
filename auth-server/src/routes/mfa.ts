@@ -9,8 +9,26 @@ import { audit } from "../lib/audit.js";
 
 const router = Router();
 
+// GET /mfa/status — returns whether MFA is currently enabled for this user
+router.get("/status", authenticate, async (req, res) => {
+  const [user] = await db
+    .select({ mfaEnabled: users.mfaEnabled })
+    .from(users)
+    .where(eq(users.id, req.user!.sub));
+  return res.json({ mfaEnabled: user?.mfaEnabled ?? false });
+});
+
 router.post("/setup", authenticate, async (req, res) => {
   const userId = req.user!.sub;
+
+  // Prevent overwriting an already-active MFA secret
+  const [existing] = await db
+    .select({ mfaEnabled: users.mfaEnabled })
+    .from(users)
+    .where(eq(users.id, userId));
+  if (existing?.mfaEnabled) {
+    return res.status(400).json({ error: "MFA is already enabled" });
+  }
 
   const secret = generateSecret();
 
@@ -21,7 +39,7 @@ router.post("/setup", authenticate, async (req, res) => {
     .where(eq(users.id, userId));
 
   const otpauthUri = generateURI({
-    issuer: "AuthLearning",
+    issuer: "Vaultly",
     label: req.user!.email,
     secret,
   });

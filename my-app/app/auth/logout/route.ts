@@ -5,7 +5,7 @@ export async function GET() {
   const session = await getSession();
 
   // Destroy the session — clears the iron-session cookie
-  session.destroy();
+  await session.destroy();
 
   return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/auth/login`);
 }
