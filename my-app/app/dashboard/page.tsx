@@ -1,6 +1,7 @@
 import { getSession } from "@/app/lib/session";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { DashboardLayout } from "@/app/components/dashboard-layout";
 import { Badge, roleBadgeVariant } from "@/app/components/ui/badge";
 
@@ -186,9 +187,11 @@ export default async function DashboardPage() {
         {/* Profile card */}
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-5 flex items-center gap-4">
           {user.picture ? (
-            <img
+            <Image
               src={user.picture}
               alt="avatar"
+              width={48}
+              height={48}
               className="w-12 h-12 rounded-full object-cover shrink-0 ring-2 ring-zinc-700"
             />
           ) : (
