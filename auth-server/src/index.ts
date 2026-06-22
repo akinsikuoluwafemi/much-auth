@@ -12,10 +12,19 @@ const app = express();
 
 app.use(express.json());
 app.use(cookieParser());
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : ["http://localhost:3000"];
+
 app.use(
   cors({
-    origin: "http://localhost:3000", // your Next.js app
-    credentials: true, // allows cookie to be sent
+    origin: (origin, callback) => {
+      // Allow requests with no origin (server-to-server, curl, etc.)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`CORS: origin ${origin} not allowed`));
+    },
+    credentials: true,
   }),
 );
 

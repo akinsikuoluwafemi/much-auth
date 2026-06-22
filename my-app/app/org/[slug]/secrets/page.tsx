@@ -10,7 +10,7 @@ const MOCK_SECRETS = [
     id: "sec_01",
     name: "STRIPE_SECRET_KEY",
     type: "API Key" as const,
-    value: "sk_live_4xKj9mNqR2vLpT8wYcBdEfHi3ZoAuSg7",
+    value: "sk_demo_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     lastAccessed: "2 min ago",
     accessedBy: "femi@example.com",
     createdAt: "2024-11-01",
@@ -82,7 +82,7 @@ const MOCK_SECRETS = [
     name: "SLACK_WEBHOOK_URL",
     type: "Webhook" as const,
     value:
-      "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX",
+      "https://hooks.slack.example/services/T00000000/B00000000/XXXXXXXXXXXXXXXX",
     lastAccessed: "1 week ago",
     accessedBy: "alerting@internal",
     createdAt: "2024-09-15",

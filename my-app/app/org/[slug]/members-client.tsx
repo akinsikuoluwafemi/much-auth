@@ -88,7 +88,9 @@ export function OrgMembersClient({
     }
   }
 
-  const adminCount = memberList.filter((member) => member.role === "admin").length;
+  const adminCount = memberList.filter(
+    (member) => member.role === "admin",
+  ).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -127,21 +129,24 @@ export function OrgMembersClient({
               {isAdmin ? (
                 (() => {
                   const isSelf = member.userId === currentUserId;
-                  const isLastAdmin = member.role === "admin" && adminCount === 1;
+                  const isLastAdmin =
+                    member.role === "admin" && adminCount === 1;
 
                   return (
-                <select
-                  value={member.role}
-                  disabled={changingRole === member.userId || isSelf || isLastAdmin}
-                  onChange={(e) =>
-                    handleRoleChange(member.userId, e.target.value)
-                  }
-                  className="h-7 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 cursor-pointer"
-                >
-                  <option value="admin">Admin</option>
-                  <option value="member">Member</option>
-                  <option value="viewer">Viewer</option>
-                </select>
+                    <select
+                      value={member.role}
+                      disabled={
+                        changingRole === member.userId || isSelf || isLastAdmin
+                      }
+                      onChange={(e) =>
+                        handleRoleChange(member.userId, e.target.value)
+                      }
+                      className="h-7 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 cursor-pointer"
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="member">Member</option>
+                      <option value="viewer">Viewer</option>
+                    </select>
                   );
                 })()
               ) : (

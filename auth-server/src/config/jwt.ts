@@ -13,14 +13,17 @@ import { v4 as uuidv4 } from "uuid";
 export const KEY_ID = "auth-server-key-1";
 
 // load keys once at startup - not on every request (perf)
-const privateKey = fs.readFileSync(
-  path.resolve(process.env.JWT_PRIVATE_KEY_PATH!),
-  "utf-8",
-);
+// Production: keys passed as env vars — PEM content with newlines stored as \n
+// Local dev:  keys read from filesystem via JWT_PRIVATE_KEY_PATH / JWT_PUBLIC_KEY_PATH
+const privateKey =
+  process.env.NODE_ENV === "production"
+    ? process.env.JWT_PRIVATE_KEY!.replace(/\\n/g, "\n")
+    : fs.readFileSync(path.resolve(process.env.JWT_PRIVATE_KEY_PATH!), "utf-8");
 
-const publicKey = fs.readFileSync(
-  path.resolve(process.env.JWT_PUBLIC_KEY_PATH!),
-);
+const publicKey =
+  process.env.NODE_ENV === "production"
+    ? process.env.JWT_PUBLIC_KEY!.replace(/\\n/g, "\n")
+    : fs.readFileSync(path.resolve(process.env.JWT_PUBLIC_KEY_PATH!), "utf-8");
 
 // Convert RSA public PEM → JWK format using Node's built-in crypto
 // This is what gets served at /.well-known/jwks.json

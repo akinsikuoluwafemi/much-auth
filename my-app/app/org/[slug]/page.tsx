@@ -1,5 +1,7 @@
 import { getSession } from "@/app/lib/session";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
+import { cache } from "react";
 import { DashboardLayout } from "@/app/components/dashboard-layout";
 import { OrgMembersClient } from "./members-client";
 
@@ -31,7 +33,11 @@ async function getOrgData(
   }
 }
 
-// Read claims from JWT payload without verifying signature — just peeking
+// cache() wraps Date.now() so React 19 treats it as stable within one render.
+// The value is fixed per request since connection() opts this page into
+// dynamic rendering (a new render = a new request = a new timestamp).
+const getServerTime = cache(() => Math.floor(Date.now() / 1000));
+
 function jwtClaims(token: string): {
   org_id?: string;
   org_slug?: string;
@@ -54,6 +60,10 @@ export default async function OrgPage({
 
   const { slug } = await params;
 
+  // connection() opts this page into dynamic rendering, which allows
+  // impure functions like Date.now() used in token expiry checks below.
+  await connection();
+
   const token = session.user.accessToken;
 
   // Server Components cannot write cookies, so we can't save a reissued token here.
@@ -62,7 +72,7 @@ export default async function OrgPage({
   if (token) {
     const claims = jwtClaims(token);
     const isExpired =
-      claims.exp != null ? claims.exp < Math.floor(Date.now() / 1000) : false;
+      claims.exp != null ? claims.exp < getServerTime() : false;
     const hasNoOrg = !claims.org_id;
 
     if (isExpired || hasNoOrg) {

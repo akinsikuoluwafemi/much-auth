@@ -93,7 +93,7 @@ router.get(
   requireOrg,
   authorize("users:read"),
   async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     // TENANT ISOLATION — only return this org if the token's org_id matches
     // Without this check, any authenticated user could fetch any org by ID
@@ -133,7 +133,7 @@ router.post(
   requireOrg,
   authorize("users:write"),
   async (req: Request, res: Response) => {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { email, role = "member" } = req.body;
 
     if (req.user!.org_id !== id) {
@@ -338,7 +338,8 @@ router.patch(
   requireOrg,
   authorize("users:write"),
   async (req: Request, res: Response) => {
-    const { id, userId } = req.params;
+    const id = req.params.id as string;
+    const userId = req.params.userId as string;
     const { role } = req.body;
 
     if (req.user!.org_id !== id) {
@@ -362,7 +363,7 @@ router.patch(
       .where(
         and(
           eq(organizationMembers.organizationId, id),
-          eq(organizationMembers.userId, userId as string),
+          eq(organizationMembers.userId, userId),
         ),
       );
 
@@ -392,7 +393,7 @@ router.patch(
       .where(
         and(
           eq(organizationMembers.organizationId, id),
-          eq(organizationMembers.userId, userId as string),
+          eq(organizationMembers.userId, userId),
         ),
       )
       .returning();
