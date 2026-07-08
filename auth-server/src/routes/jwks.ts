@@ -2,8 +2,6 @@ import { Router, Request, Response } from "express";
 import { publicJwk } from "../config/jwt.js";
 
 const router = Router();
-// ACCESS_TOKEN_EXPIRY=15m (set in .env)
-
 
 // GET /.well-known/jwks.json
 // Public endpoint — no auth required

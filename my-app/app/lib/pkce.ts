@@ -15,4 +15,4 @@ export function generateCodeChallenge(verifier: string): string {
 // When Google redirects back, we verify this matches what we sent
 export function generateState(): string {
   return crypto.randomBytes(32).toString('base64url');
-}
+} 

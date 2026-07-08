@@ -32,6 +32,7 @@ export default async function DashboardPage() {
 
   const tiles = [
     {
+      key: "secrets",
       href: hasOrg ? `/org/${user.org_slug}/secrets` : "/org/create",
       title: hasOrg ? "Vault Secrets" : "Create a Vault",
       description: hasOrg
@@ -56,6 +57,7 @@ export default async function DashboardPage() {
       badgeVariant: "indigo" as const,
     },
     {
+      key: "team",
       href: hasOrg ? `/org/${user.org_slug}` : "/org/create",
       title: hasOrg ? "Team" : "Create Organisation",
       description: hasOrg
@@ -80,6 +82,7 @@ export default async function DashboardPage() {
       badgeVariant: "success" as const,
     },
     {
+      key: "security",
       href: "/settings/mfa",
       title: "Security",
       description: "MFA, session management, and access token configuration",
@@ -102,6 +105,7 @@ export default async function DashboardPage() {
       badgeVariant: "default" as const,
     },
     {
+      key: "audit",
       href: hasOrg ? `/org/${user.org_slug}/audit` : "#",
       title: "Audit Log",
       description: hasOrg
@@ -229,7 +233,7 @@ export default async function DashboardPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {tiles.map((tile) => (
               <Link
-                key={tile.href}
+                key={tile.key}
                 href={tile.href}
                 className="group rounded-xl border border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800/60 hover:border-zinc-700 p-5 flex flex-col gap-3 transition-all duration-150"
               >

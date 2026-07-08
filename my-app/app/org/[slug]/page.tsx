@@ -71,8 +71,7 @@ export default async function OrgPage({
   // which CAN write cookies, then redirects back — transparent to the user.
   if (token) {
     const claims = jwtClaims(token);
-    const isExpired =
-      claims.exp != null ? claims.exp < getServerTime() : false;
+    const isExpired = claims.exp != null ? claims.exp < getServerTime() : false;
     const hasNoOrg = !claims.org_id;
 
     if (isExpired || hasNoOrg) {

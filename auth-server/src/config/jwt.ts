@@ -25,7 +25,8 @@ const publicKey =
     ? process.env.JWT_PUBLIC_KEY!.replace(/\\n/g, "\n")
     : fs.readFileSync(path.resolve(process.env.JWT_PUBLIC_KEY_PATH!), "utf-8");
 
-// Convert RSA public PEM → JWK format using Node's built-in crypto
+// Convert RSA public key PEM  into → JWK format using Node's built-in crypto
+// (so other services can verify JWTs that your auth server signed.)
 // This is what gets served at /.well-known/jwks.json
 const publicKeyObject = crypto.createPublicKey(publicKey);
 const jwk = publicKeyObject.export({ format: "jwk" }) as Record<string, string>;
@@ -72,7 +73,7 @@ export function verifyAccessToken(token: string): TokenPayload {
 
   return jwt.verify(token, publicKey, {
     algorithms: ["RS256"],
-    issuer: "auth-server",
+    issuer: "auth-server", // (iss + aud enforced — prevents token confusion attacks)
     audience: "my-app",
   }) as TokenPayload;
 }
